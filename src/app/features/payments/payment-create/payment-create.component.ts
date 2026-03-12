@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import {
   CreateOrderReq,
   CreateOrderRes,
@@ -15,7 +16,13 @@ import { Customer } from '../../../shared/models/customer.model';
 import { BookingsApi } from '../../../api/bookings.service';
 import { Booking } from '../../../shared/models/booking.model';
 import { AuthService } from '../../../core/services/auth.service';
-import { finalize } from 'rxjs';
+import { finalize, forkJoin, of } from 'rxjs';
+import { DealersApi } from '../../../api/dealers.service';
+import { VehiclesApi } from '../../../api/vehicles.service';
+import { Dealer } from '../../../shared/models/dealer.model';
+import { Vehicle } from '../../../shared/models/vehicle.model';
+import { catchError } from 'rxjs/operators';
+import { DemoPaymentModalComponent } from '../../../shared/components/demo-payment-modal/demo-payment-modal.component';
 
 interface RazorpaySuccessPayload {
   razorpay_payment_id: string;
@@ -37,6 +44,13 @@ interface RazorpayOptions {
   name?: string;
   description?: string;
   order_id: string;
+  method?: {
+    card?: boolean;
+    upi?: boolean;
+    netbanking?: boolean;
+    wallet?: boolean;
+    emi?: boolean;
+  };
   handler: (payload: RazorpaySuccessPayload) => void;
   prefill?: {
     email?: string;
@@ -64,7 +78,7 @@ const MOCK_PAYMENT_SIGNATURE = 'mock_signature';
 
 @Component({
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, DemoPaymentModalComponent],
   templateUrl: './payment-create.component.html',
   styleUrl: './payment-create.component.css'
 })
@@ -74,6 +88,12 @@ export class PaymentCreateComponent {
   bookings: Booking[] = [];
   processing = false;
   result?: VerifyRes;
+  selectedBooking?: Booking;
+  selectedDealer?: Dealer;
+  selectedVehicle?: Vehicle;
+  demoCheckoutOpen = false;
+  demoCheckoutMessage = '';
+  private demoOrder?: CreateOrderRes;
 
   private razorpayLoader?: Promise<void>;
 
@@ -81,9 +101,28 @@ export class PaymentCreateComponent {
     private api: PaymentsApi,
     private customersApi: CustomersApi,
     private bookingsApi: BookingsApi,
+    private dealersApi: DealersApi,
+    private vehiclesApi: VehiclesApi,
+    private route: ActivatedRoute,
     private auth: AuthService,
     private toast: ToastService
   ) {
+    this.initializeCustomerContext();
+  }
+
+  private initializeCustomerContext() {
+    const routeCustomerId = Number(this.route.snapshot.queryParamMap.get('customerId') || '0');
+    const cachedCustomerId = this.auth.getCustomerId() || 0;
+    const resolvedCustomerId = routeCustomerId > 0 ? routeCustomerId : cachedCustomerId;
+
+    if (resolvedCustomerId > 0) {
+      this.model.customerId = resolvedCustomerId;
+      this.auth.setCustomerId(resolvedCustomerId);
+      this.customers = [this.buildCurrentCustomerOption(resolvedCustomerId)];
+      this.loadBookings();
+      return;
+    }
+
     this.loadCustomers();
   }
 
@@ -95,8 +134,10 @@ export class PaymentCreateComponent {
         const matched = email ? this.customers.find((c) => c.email?.toLowerCase() === email.toLowerCase()) : undefined;
         if (matched?.customerId) {
           this.model.customerId = matched.customerId;
+          this.auth.setCustomerId(matched.customerId);
         } else if (this.customers[0]?.customerId) {
           this.model.customerId = this.customers[0].customerId;
+          this.auth.setCustomerId(this.customers[0].customerId);
         }
         if (this.model.customerId) this.loadBookings();
       },
@@ -106,9 +147,16 @@ export class PaymentCreateComponent {
 
   loadBookings() {
     if (!this.model.customerId) return;
+    this.auth.setCustomerId(this.model.customerId);
     this.bookingsApi.byCustomer(this.model.customerId).subscribe({
       next: (res) => {
         this.bookings = res.filter((b) => b.bookingStatus !== 'CANCELLED');
+        this.selectedBooking = undefined;
+        this.selectedDealer = undefined;
+        this.selectedVehicle = undefined;
+        this.demoCheckoutOpen = false;
+        this.demoCheckoutMessage = '';
+        this.demoOrder = undefined;
         if (this.bookings[0]?.id) {
           this.selectBooking(this.bookings[0].id);
         }
@@ -120,8 +168,10 @@ export class PaymentCreateComponent {
   selectBooking(bookingId: number) {
     const booking = this.bookings.find((b) => b.id === Number(bookingId));
     if (!booking?.id) return;
+    this.selectedBooking = booking;
     this.model.bookingId = booking.id;
     this.model.amount = booking.amount ?? 0;
+    this.resolveBookingSummary(booking);
   }
 
   submit() {
@@ -133,13 +183,17 @@ export class PaymentCreateComponent {
       this.toast.error('Please select a valid booking.');
       return;
     }
-    if (!this.model.amount || this.model.amount <= 0) {
+    if (!this.lockedAmount || this.lockedAmount <= 0) {
       this.toast.error('Amount must be greater than 0.');
       return;
     }
 
+    this.model.amount = this.lockedAmount;
     this.processing = true;
     this.result = undefined;
+    this.demoCheckoutOpen = false;
+    this.demoCheckoutMessage = '';
+    this.demoOrder = undefined;
     this.api.createOrder({ bookingId: this.model.bookingId, customerId: this.model.customerId }).subscribe({
       next: (order) => {
         this.openRazorpay(order);
@@ -164,11 +218,15 @@ export class PaymentCreateComponent {
       return;
     }
 
+    if (this.hasAmountMismatch(amount)) {
+      this.toast.info(this.buildAmountMismatchMessage(amount));
+    }
+
     if (order.mockMode) {
-      if (order.message) {
-        this.toast.info(order.message);
-      }
-      this.verifyPayment(this.buildMockSuccessPayload(orderId), orderId, order);
+      this.processing = false;
+      this.demoOrder = order;
+      this.demoCheckoutMessage = order.message || 'Demo payment mode is enabled for this transaction.';
+      this.demoCheckoutOpen = true;
       return;
     }
 
@@ -200,6 +258,13 @@ export class PaymentCreateComponent {
       name: 'MotoMint',
       description: `Booking #${this.model.bookingId}`,
       order_id: orderId,
+      method: {
+        card: this.model.paymentMethod === 'CARD',
+        upi: this.model.paymentMethod === 'UPI',
+        netbanking: false,
+        wallet: false,
+        emi: false,
+      },
       prefill: {
         email: this.auth.getEmail() || undefined,
       },
@@ -262,7 +327,7 @@ export class PaymentCreateComponent {
     if (typeof rawAmount === 'number' && Number.isFinite(rawAmount) && rawAmount > 0) {
       return rawAmount;
     }
-    return Math.round(this.model.amount * 100);
+    return Math.round(this.lockedAmount * 100);
   }
 
   private readFirstNonEmpty(values: Array<string | undefined>): string {
@@ -323,6 +388,82 @@ export class PaymentCreateComponent {
 
   private getRazorpayConstructor(): RazorpayConstructor | undefined {
     return (window as unknown as { Razorpay?: RazorpayConstructor }).Razorpay;
+  }
+
+  get lockedAmount(): number {
+    const amount = Number(this.selectedBooking?.amount || 0);
+    return Number.isFinite(amount) && amount > 0 ? amount : 0;
+  }
+
+  get selectedVehicleLabel(): string {
+    if (!this.selectedVehicle) return this.selectedBooking?.vehicleId ? `Vehicle #${this.selectedBooking.vehicleId}` : '-';
+    return `${this.selectedVehicle.brand} ${this.selectedVehicle.name}`;
+  }
+
+  formatCurrency(amount?: number): string {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(Number(amount || 0));
+  }
+
+  private resolveBookingSummary(booking: Booking) {
+    this.selectedDealer = undefined;
+    this.selectedVehicle = undefined;
+
+    forkJoin({
+      dealer: this.dealersApi.get(booking.dealerId).pipe(catchError(() => of(undefined))),
+      vehicle: this.vehiclesApi.getById(booking.vehicleId).pipe(catchError(() => of(undefined))),
+    }).subscribe({
+      next: ({ dealer, vehicle }) => {
+        this.selectedDealer = dealer;
+        this.selectedVehicle = vehicle;
+      }
+    });
+  }
+
+  private hasAmountMismatch(orderAmountInPaise: number): boolean {
+    const trustedAmountInPaise = this.lockedAmount > 0 ? Math.round(this.lockedAmount * 100) : 0;
+    if (!trustedAmountInPaise || !orderAmountInPaise) {
+      return false;
+    }
+    return trustedAmountInPaise !== orderAmountInPaise;
+  }
+
+  private buildAmountMismatchMessage(orderAmountInPaise: number): string {
+    return `Razorpay will open with ${this.formatCurrency(orderAmountInPaise / 100)} for this checkout. Booking total remains ${this.formatCurrency(this.lockedAmount)}.`;
+  }
+
+  closeDemoCheckout() {
+    this.demoCheckoutOpen = false;
+    this.demoCheckoutMessage = '';
+    this.demoOrder = undefined;
+    this.toast.info('Payment cancelled.');
+  }
+
+  confirmDemoCheckout() {
+    if (!this.demoOrder?.razorpayOrderId) {
+      this.demoCheckoutOpen = false;
+      this.toast.error('Invalid create-order response from server.');
+      return;
+    }
+
+    const order = this.demoOrder;
+    const orderId = order.razorpayOrderId;
+    this.demoCheckoutOpen = false;
+    this.processing = true;
+    this.verifyPayment(this.buildMockSuccessPayload(orderId), orderId, order);
+  }
+
+  private buildCurrentCustomerOption(customerId: number): Customer {
+    return {
+      customerId,
+      customerName: 'Current Customer',
+      address: '-',
+      email: this.auth.getEmail() || 'current@motomint.local',
+      contactNumber: '',
+    };
   }
 }
 

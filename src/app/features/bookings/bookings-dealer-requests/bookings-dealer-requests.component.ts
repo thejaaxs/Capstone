@@ -2,13 +2,18 @@ import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit } from '@angular/core';
 import { BookingsApi } from '../../../api/bookings.api';
+import { CustomersApi } from '../../../api/customers.service';
 import { DealersApi } from '../../../api/dealers.service';
+import { VehiclesApi } from '../../../api/vehicles.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { Booking } from '../../../shared/models/booking.model';
+import { Customer } from '../../../shared/models/customer.model';
+import { Vehicle } from '../../../shared/models/vehicle.model';
 import { BadgeComponent } from '../../../shared/ui/badge.component';
 import { SectionHeaderComponent } from '../../../shared/ui/section-header.component';
 import { SkeletonLoaderComponent } from '../../../shared/ui/skeleton-loader.component';
+import { catchError, forkJoin, of } from 'rxjs';
 
 type ActionType = 'ACCEPT' | 'REJECT';
 
@@ -21,16 +26,26 @@ type ActionType = 'ACCEPT' | 'REJECT';
 })
 export class BookingsDealerRequestsComponent implements OnInit {
   dealerId = 0;
+  dealerName = '';
   loading = false;
   resolvingDealer = false;
   errorMessage = '';
   requests: Booking[] = [];
   actionBookingId: number | null = null;
   actionType: ActionType | null = null;
+  customerNames = new Map<number, string>();
+  vehicleLabels = new Map<number, string>();
+  private readonly currencyFormatter = new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  });
 
   constructor(
     private bookingsApi: BookingsApi,
+    private customersApi: CustomersApi,
     private dealersApi: DealersApi,
+    private vehiclesApi: VehiclesApi,
     private auth: AuthService,
     private toast: ToastService
   ) {}
@@ -47,9 +62,15 @@ export class BookingsDealerRequestsComponent implements OnInit {
 
     this.loading = true;
     this.errorMessage = '';
-    this.bookingsApi.byDealer(this.dealerId).subscribe({
-      next: (rows) => {
-        this.requests = rows.filter((b) => this.normalizeStatus(b.bookingStatus) === 'REQUESTED');
+    forkJoin({
+      bookings: this.bookingsApi.byDealer(this.dealerId),
+      customers: this.customersApi.list().pipe(catchError(() => of([] as Customer[]))),
+      vehicles: this.vehiclesApi.listByDealer(this.dealerId).pipe(catchError(() => of([] as Vehicle[]))),
+    }).subscribe({
+      next: ({ bookings, customers, vehicles }) => {
+        this.customerNames = this.buildCustomerNames(customers);
+        this.vehicleLabels = this.buildVehicleLabels(vehicles);
+        this.requests = bookings.filter((b) => this.normalizeStatus(b.bookingStatus) === 'REQUESTED');
       },
       error: (err: HttpErrorResponse) => {
         const backend = typeof err.error === 'string' ? err.error : err.error?.message;
@@ -83,10 +104,24 @@ export class BookingsDealerRequestsComponent implements OnInit {
     return 'REQUESTED';
   }
 
+  getCustomerLabel(customerId: number): string {
+    return this.customerNames.get(customerId) || `Customer #${customerId}`;
+  }
+
+  getVehicleLabel(vehicleId: number): string {
+    return this.vehicleLabels.get(vehicleId) || `Vehicle #${vehicleId}`;
+  }
+
+  formatCurrency(amount?: number): string {
+    if (amount == null || !Number.isFinite(Number(amount))) return '-';
+    return this.currencyFormatter.format(Number(amount));
+  }
+
   private resolveDealerIdAndLoad(): void {
     const cachedDealerId = this.auth.getDealerId();
     if (cachedDealerId) {
       this.dealerId = cachedDealerId;
+      this.resolveDealerName(cachedDealerId);
       this.load();
       return;
     }
@@ -106,6 +141,7 @@ export class BookingsDealerRequestsComponent implements OnInit {
           return;
         }
         this.dealerId = matched.dealerId;
+        this.dealerName = matched.dealerName;
         this.auth.setDealerId(matched.dealerId);
         this.load();
       },
@@ -114,6 +150,17 @@ export class BookingsDealerRequestsComponent implements OnInit {
       },
       complete: () => {
         this.resolvingDealer = false;
+      }
+    });
+  }
+
+  private resolveDealerName(dealerId: number): void {
+    this.dealersApi.get(dealerId).subscribe({
+      next: (dealer) => {
+        this.dealerName = dealer.dealerName || `Dealer #${dealerId}`;
+      },
+      error: () => {
+        this.dealerName = `Dealer #${dealerId}`;
       }
     });
   }
@@ -142,5 +189,17 @@ export class BookingsDealerRequestsComponent implements OnInit {
         this.actionType = null;
       }
     });
+  }
+
+  private buildCustomerNames(customers: Customer[]): Map<number, string> {
+    return new Map(customers
+      .filter((customer) => customer.customerId && customer.customerName)
+      .map((customer) => [Number(customer.customerId), customer.customerName]));
+  }
+
+  private buildVehicleLabels(vehicles: Vehicle[]): Map<number, string> {
+    return new Map(vehicles
+      .filter((vehicle) => vehicle.id)
+      .map((vehicle) => [Number(vehicle.id), `${vehicle.brand} ${vehicle.name}`]));
   }
 }

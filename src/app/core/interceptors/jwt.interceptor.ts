@@ -6,7 +6,6 @@ export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
   const token = auth.getToken();
 
-  // Don't attach token to login/register calls
   if (!token || req.url.includes('/auth/login') || req.url.includes('/auth/register')) {
     return next(req);
   }

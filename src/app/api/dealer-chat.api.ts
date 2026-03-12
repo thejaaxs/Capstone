@@ -7,7 +7,7 @@ import { ChatResponse, RecommendationRequest, VehicleRecommendation } from '../s
 
 @Injectable({ providedIn: 'root' })
 export class DealerChatApi {
-  private readonly base = `${environment.apiBaseUrl}/dealer-chat`;
+  private readonly base = `${environment.apiUrl}/dealer-chat`;
   private readonly silentContext = new HttpContext().set(SKIP_GLOBAL_ERROR_HANDLING, true);
 
   constructor(private http: HttpClient) {}
@@ -27,6 +27,6 @@ export class DealerChatApi {
       return vehicle;
     }
     const prefix = vehicle.imageUrl.startsWith('/') ? '' : '/';
-    return { ...vehicle, imageUrl: `${environment.apiBaseUrl}${prefix}${vehicle.imageUrl}` };
+    return { ...vehicle, imageUrl: `${environment.apiUrl}${prefix}${vehicle.imageUrl}` };
   }
 }

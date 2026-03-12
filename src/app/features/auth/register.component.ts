@@ -211,6 +211,7 @@ export class RegisterComponent {
   };
   loading = false;
   private pendingProfile: PendingProfileSetup | null = null;
+  private readonly returnUrl: string | null;
 
   constructor(
     private api: AuthApi,
@@ -220,6 +221,7 @@ export class RegisterComponent {
     private router: Router,
     private toast: ToastService
   ) {
+    this.returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
     const role = this.route.snapshot.queryParamMap.get('role');
     if (role === 'CUSTOMER' || role === 'DEALER') {
       this.model.userType = role;
@@ -305,7 +307,7 @@ export class RegisterComponent {
   }
 
   goLogin() {
-    this.router.navigateByUrl('/login');
+    this.navigateToLogin();
   }
 
   isPendingRetryForCurrentForm(): boolean {
@@ -352,7 +354,16 @@ export class RegisterComponent {
     } else {
       this.toast.success('Registration successful. Please login with your new account.');
     }
-    this.router.navigateByUrl('/login');
+    this.navigateToLogin();
+  }
+
+  private navigateToLogin() {
+    this.router.navigate(['/login'], {
+      queryParams: {
+        role: this.model.userType,
+        ...(this.returnUrl ? { returnUrl: this.returnUrl } : {})
+      }
+    });
   }
 
   private getFriendlyRegisterError(err: HttpErrorResponse): string {

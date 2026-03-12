@@ -71,7 +71,7 @@ import { SkeletonLoaderComponent } from '../../../shared/ui/skeleton-loader.comp
         <tbody>
           <tr *ngFor="let r of listData">
             <td class="col-product" [title]="r.productName">{{ r.productName }}</td>
-            <td><app-badge value="INFO" [text]="r.rating + ' / 10'"></app-badge></td>
+            <td><app-badge value="INFO" [text]="r.rating + ' / 5'"></app-badge></td>
             <td class="col-title" [title]="r.title || '-'">{{ r.title || '-' }}</td>
             <td class="col-date">
               {{ r.createdAt ? (r.createdAt | date:'dd MMM yyyy') : '-' }}

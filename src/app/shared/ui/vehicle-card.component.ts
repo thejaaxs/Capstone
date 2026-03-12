@@ -190,8 +190,10 @@ export class VehicleCardComponent {
     }
 
     if (!role) {
-      this.toast.info('Please login or sign up to view vehicle details.');
-      this.router.navigateByUrl('/login');
+      this.toast.info('Please login to continue.');
+      this.router.navigate(['/login'], {
+        queryParams: { returnUrl: `/customer/vehicles/${this.vehicle.id}` }
+      });
       return;
     }
 

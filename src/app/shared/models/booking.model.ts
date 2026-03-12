@@ -3,6 +3,7 @@ export interface Booking {
   customerId: number;
   dealerId: number;
   vehicleId: number;
+  bookingAmount?: number;
   bookingDate?: string;
   deliveryDate?: string;
   bookingStatus?: 'REQUESTED' | 'ACCEPTED' | 'REJECTED' | 'CONFIRMED' | 'CANCELLED' | 'PENDING' | string;
@@ -16,5 +17,6 @@ export interface BookingCreateRequest {
   dealerId: number;
   vehicleId: number;
   amount?: number;
+  bookingAmount?: number;
   deliveryDate?: string;
 }

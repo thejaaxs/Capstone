@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class ReviewsApi {
-  private base = `${environment.apiBaseUrl}/reviews`;
+  private base = `${environment.apiUrl}/reviews`;
 
   constructor(private http: HttpClient) {}
 
@@ -15,12 +15,12 @@ export class ReviewsApi {
     return this.http.get<Review[]>(url);
   }
 
-  add(r: ReviewCreateRequest): Observable<string> {
-    return this.http.post(`${this.base}/add`, r, { responseType: 'text' });
+  add(r: ReviewCreateRequest): Observable<Review> {
+    return this.http.post<Review>(`${this.base}/add`, r);
   }
 
-  update(id: number, payload: ReviewUpdateRequest): Observable<string> {
-    return this.http.put(`${this.base}/${id}`, payload, { responseType: 'text' });
+  update(id: number, payload: ReviewUpdateRequest): Observable<Review> {
+    return this.http.put<Review>(`${this.base}/${id}`, payload);
   }
 
   delete(id: number): Observable<string> {

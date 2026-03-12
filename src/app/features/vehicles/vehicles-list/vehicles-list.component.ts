@@ -1,14 +1,14 @@
-import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { VehiclesApi } from '../../../api/vehicles.service';
-import { Vehicle } from '../../../shared/models/vehicle.model';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { ToastService } from '../../../core/services/toast.service';
-import { AuthService } from '../../../core/services/auth.service';
 import { DealersApi } from '../../../api/dealers.service';
+import { VehiclesApi } from '../../../api/vehicles.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { Dealer } from '../../../shared/models/dealer.model';
-import { HttpErrorResponse } from '@angular/common/http';
+import { Vehicle } from '../../../shared/models/vehicle.model';
 import { BadgeComponent } from '../../../shared/ui/badge.component';
 import { SectionHeaderComponent } from '../../../shared/ui/section-header.component';
 import { SkeletonLoaderComponent } from '../../../shared/ui/skeleton-loader.component';
@@ -28,14 +28,14 @@ import { VehicleCardComponent } from '../../../shared/ui/vehicle-card.component'
   template: `
     <section class="page-card page-shell">
       <app-section-header
-        [title]="role === 'ROLE_CUSTOMER' ? 'Discover Two-Wheelers' : 'Dealer Vehicles'"
-        [subtitle]="role === 'ROLE_CUSTOMER'
+        [title]="isCatalogMode ? 'Discover Two-Wheelers' : 'Dealer Vehicles'"
+        [subtitle]="isCatalogMode
           ? 'Browse bikes and scooters from trusted dealers.'
           : 'Manage vehicle inventory, updates, and bookings.'"
       ></app-section-header>
 
       <div class="toolbar">
-        <div *ngIf="role !== 'ROLE_CUSTOMER'">
+        <div *ngIf="isDealerInventoryMode">
           <label>Dealer</label>
           <select [(ngModel)]="dealerId">
             <option *ngFor="let d of dealers" [ngValue]="d.dealerId">
@@ -59,16 +59,16 @@ import { VehicleCardComponent } from '../../../shared/ui/vehicle-card.component'
         </div>
 
         <button class="btn btn-ghost" type="button" (click)="loadAll()">Load All</button>
-        <button class="btn btn-secondary" *ngIf="role !== 'ROLE_CUSTOMER'" type="button" (click)="loadByDealer()">Load By Dealer</button>
+        <button class="btn btn-secondary" *ngIf="isDealerInventoryMode" type="button" (click)="loadByDealer()">Load By Dealer</button>
 
         <span class="grow"></span>
 
-        <a *ngIf="role !== 'ROLE_CUSTOMER'" routerLink="/dealer/vehicles/create">
+        <a *ngIf="isDealerInventoryMode" routerLink="/dealer/vehicles/create">
           <button class="btn" type="button">Add Vehicle</button>
         </a>
       </div>
 
-      <app-skeleton-loader *ngIf="loading" [grid]="true" variant="card" [count]="role === 'ROLE_CUSTOMER' ? 6 : 4"></app-skeleton-loader>
+      <app-skeleton-loader *ngIf="loading" [grid]="true" variant="card" [count]="isCatalogMode ? 6 : 4"></app-skeleton-loader>
 
       <div class="state-card error" *ngIf="!loading && errorMessage">
         <p>{{ errorMessage }}</p>
@@ -76,10 +76,10 @@ import { VehicleCardComponent } from '../../../shared/ui/vehicle-card.component'
       </div>
 
       <div class="empty" *ngIf="!loading && !errorMessage && filteredList.length === 0">
-        {{ role === 'ROLE_CUSTOMER' ? 'No vehicles found.' : 'No vehicles in dealer inventory.' }}
+        {{ isCatalogMode ? 'No vehicles found right now. Try a different search or check back later.' : 'No vehicles in dealer inventory.' }}
       </div>
 
-      <div class="vehicle-grid" *ngIf="!loading && !errorMessage && filteredList.length > 0 && role === 'ROLE_CUSTOMER'">
+      <div class="vehicle-grid" *ngIf="!loading && !errorMessage && filteredList.length > 0 && isCatalogMode">
         <app-vehicle-card
           *ngFor="let v of filteredList"
           [vehicle]="v"
@@ -91,7 +91,7 @@ import { VehicleCardComponent } from '../../../shared/ui/vehicle-card.component'
         ></app-vehicle-card>
       </div>
 
-      <div class="vehicle-grid dealer-grid" *ngIf="!loading && !errorMessage && filteredList.length > 0 && role !== 'ROLE_CUSTOMER'">
+      <div class="vehicle-grid dealer-grid" *ngIf="!loading && !errorMessage && filteredList.length > 0 && isDealerInventoryMode">
         <article class="dealer-vehicle-card" *ngFor="let v of filteredList">
           <div class="dealer-image-wrap">
             <img [src]="v.imageUrl || placeholderImage" [alt]="v.name" class="dealer-image" />
@@ -121,14 +121,13 @@ export class VehiclesListComponent implements OnInit {
   loading = false;
   errorMessage = '';
   placeholderImage = 'https://placehold.co/640x360/e5edf7/36597f?text=MotoMint';
-  skeletonCards = [1, 2, 3, 4, 5, 6];
-  skeletonRows = [1, 2, 3, 4, 5];
   searchText = '';
   statusFilter = '';
   dealerId = 1;
   dealers: Dealer[] = [];
   dealerNames = new Map<number, string>();
   role: ReturnType<AuthService['getRole']>;
+  isPublicBrowse = false;
 
   constructor(
     private api: VehiclesApi,
@@ -139,7 +138,9 @@ export class VehiclesListComponent implements OnInit {
     private route: ActivatedRoute
   ) {
     this.role = this.auth.getRole();
+    this.isPublicBrowse = this.route.snapshot.data['publicBrowse'] === true;
   }
+
   ngOnInit() {
     this.route.queryParamMap.subscribe((params) => {
       const q = params.get('q');
@@ -147,6 +148,14 @@ export class VehiclesListComponent implements OnInit {
     });
     this.loadDealers();
     this.loadAll();
+  }
+
+  get isCatalogMode(): boolean {
+    return !this.isDealerInventoryMode;
+  }
+
+  get isDealerInventoryMode(): boolean {
+    return this.role === 'ROLE_DEALER' && !this.isPublicBrowse;
   }
 
   private loadDealers() {
@@ -163,13 +172,13 @@ export class VehiclesListComponent implements OnInit {
         const matched = email ? this.dealers.find((d) => d.email?.toLowerCase() === email.toLowerCase()) : undefined;
         if (matched?.dealerId) {
           this.dealerId = matched.dealerId;
-          if (this.role !== 'ROLE_CUSTOMER') this.loadByDealer();
+          if (this.isDealerInventoryMode) this.loadByDealer();
         } else if (this.dealers[0]?.dealerId) {
           this.dealerId = this.dealers[0].dealerId;
         }
       },
       error: () => {
-        if (this.role !== 'ROLE_CUSTOMER') {
+        if (this.isDealerInventoryMode) {
           this.toast.error('Failed to load dealers');
         }
       },
@@ -236,6 +245,8 @@ export class VehiclesListComponent implements OnInit {
   }
 
   openFavorite(v: Vehicle) {
+    const returnUrl = `/customer/favorites/create?dealerId=${v.dealerId}&dealerName=${encodeURIComponent(this.getDealerName(v.dealerId))}&productName=${encodeURIComponent(v.name)}`;
+    if (!this.ensureCustomerAccess(returnUrl)) return;
     this.router.navigate(['/customer/favorites/create'], {
       queryParams: {
         dealerId: v.dealerId,
@@ -246,6 +257,8 @@ export class VehiclesListComponent implements OnInit {
   }
 
   openReview(v: Vehicle) {
+    const returnUrl = `/customer/reviews/create?productName=${encodeURIComponent(v.name)}`;
+    if (!this.ensureCustomerAccess(returnUrl)) return;
     this.router.navigate(['/customer/reviews/create'], {
       queryParams: { productName: v.name }
     });
@@ -253,6 +266,8 @@ export class VehiclesListComponent implements OnInit {
 
   bookNow(v: Vehicle) {
     if (!v.id) return;
+    const returnUrl = `/customer/bookings/create?dealerId=${v.dealerId}&vehicleId=${v.id}&amount=${v.price}`;
+    if (!this.ensureCustomerAccess(returnUrl)) return;
     this.router.navigate(['/customer/bookings/create'], {
       queryParams: {
         dealerId: v.dealerId,
@@ -265,5 +280,21 @@ export class VehiclesListComponent implements OnInit {
   private normalizeStatus(status?: string): 'AVAILABLE' | 'OUT_OF_STOCK' {
     return (status || '').toUpperCase() === 'AVAILABLE' ? 'AVAILABLE' : 'OUT_OF_STOCK';
   }
-}
 
+  private ensureCustomerAccess(returnUrl: string): boolean {
+    if (this.role === 'ROLE_CUSTOMER') {
+      return true;
+    }
+
+    if (!this.role) {
+      this.toast.info('Please login to continue.');
+      this.router.navigate(['/login'], {
+        queryParams: { returnUrl }
+      });
+      return false;
+    }
+
+    this.toast.info('This action is available for customer accounts only.');
+    return false;
+  }
+}

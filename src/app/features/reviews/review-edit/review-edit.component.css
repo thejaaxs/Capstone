@@ -30,3 +30,9 @@ form {
 .rating-field small {
   color: var(--mm-text-muted);
 }
+
+.field-error {
+  color: var(--mm-danger);
+  font-size: 0.8rem;
+  margin-top: -0.2rem;
+}

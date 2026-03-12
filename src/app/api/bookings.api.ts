@@ -6,7 +6,7 @@ import { Booking, BookingCreateRequest } from '../shared/models/booking.model';
 
 @Injectable({ providedIn: 'root' })
 export class BookingsApi {
-  private readonly base = `${environment.apiBaseUrl}/bookings`;
+  private readonly base = `${environment.apiUrl}/bookings`;
 
   constructor(private http: HttpClient) {}
 

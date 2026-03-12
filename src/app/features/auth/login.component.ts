@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AuthApi } from '../../api/auth.api';
 import { AuthService } from '../../core/services/auth.service';
@@ -188,13 +188,18 @@ export class LoginComponent {
   password = '';
   selectedRole: 'ROLE_CUSTOMER' | 'ROLE_DEALER' | null = 'ROLE_CUSTOMER';
   loading = false;
+  private readonly returnUrl: string | null;
 
   constructor(
     private api: AuthApi,
     private auth: AuthService,
+    private route: ActivatedRoute,
     private router: Router,
     private toast: ToastService
-  ) {}
+  ) {
+    this.returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+    this.selectedRole = this.normalizeRole(this.route.snapshot.queryParamMap.get('role')) ?? 'ROLE_CUSTOMER';
+  }
 
   doLogin() {
     if (!this.selectedRole) {
@@ -227,7 +232,7 @@ export class LoginComponent {
           this.auth.saveLogin(res);
           this.toast.success(res.message || 'Login successful');
 
-          this.router.navigateByUrl(this.auth.getHomeRoute(res.role));
+          this.router.navigateByUrl(this.auth.resolvePostLoginUrl(this.returnUrl, res.role));
         },
         error: (err: HttpErrorResponse) => {
           this.toast.error(this.getFriendlyAuthError(err));
@@ -238,7 +243,18 @@ export class LoginComponent {
 
   goRegister() {
     const role = this.selectedRole?.replace('ROLE_', '') || 'CUSTOMER';
-    this.router.navigateByUrl(`/register?role=${role}`);
+    this.router.navigate(['/register'], {
+      queryParams: {
+        role,
+        ...(this.returnUrl ? { returnUrl: this.returnUrl } : {})
+      }
+    });
+  }
+
+  private normalizeRole(role: string | null): 'ROLE_CUSTOMER' | 'ROLE_DEALER' | null {
+    if (role === 'ROLE_CUSTOMER' || role === 'CUSTOMER') return 'ROLE_CUSTOMER';
+    if (role === 'ROLE_DEALER' || role === 'DEALER') return 'ROLE_DEALER';
+    return null;
   }
 
   private getFriendlyAuthError(err: HttpErrorResponse): string {

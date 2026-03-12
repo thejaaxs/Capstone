@@ -6,7 +6,7 @@ import { map, Observable } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class VehiclesApi {
-  private base = `${environment.apiBaseUrl}/vehicles`;
+  private base = `${environment.apiUrl}/vehicles`;
 
   constructor(private http: HttpClient) {}
 
@@ -69,7 +69,7 @@ export class VehiclesApi {
       return normalized;
     }
     const prefix = v.imageUrl.startsWith('/') ? '' : '/';
-    return { ...normalized, imageUrl: `${environment.apiBaseUrl}${prefix}${v.imageUrl}` };
+    return { ...normalized, imageUrl: `${environment.apiUrl}${prefix}${v.imageUrl}` };
   }
 
   private normalizePositiveNumber(value?: number | null): number | undefined {

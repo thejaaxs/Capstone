@@ -1,11 +1,11 @@
-<section class="page-card page-shell">
+<section class="page-card page-shell orders-shell">
   <app-section-header
-    title="My Bookings"
-    subtitle="Track booking and payment status in one place."
+    title="My Orders"
+    subtitle="Track bookings, payments, and delivery progress in one place."
   ></app-section-header>
 
-  <div class="toolbar">
-    <div>
+  <div class="orders-toolbar">
+    <div class="toolbar-field">
       <label for="customerId">Customer</label>
       <select id="customerId" [(ngModel)]="customerId">
         <option *ngFor="let c of customers" [ngValue]="c.customerId">
@@ -13,12 +13,15 @@
         </option>
       </select>
     </div>
-    <button class="btn btn-ghost" type="button" (click)="load()" [disabled]="loading">{{ loading ? 'Loading...' : 'Load' }}</button>
-    <a routerLink="/customer/bookings/create"><button class="btn" type="button">Create Booking</button></a>
+
+    <div class="toolbar-actions">
+      <button class="btn btn-ghost" type="button" (click)="load()" [disabled]="loading">{{ loading ? 'Loading...' : 'Refresh' }}</button>
+      <a routerLink="/customer/bookings/create"><button class="btn" type="button">Create Booking</button></a>
+    </div>
   </div>
 
   <div class="panel" *ngIf="loading">
-    <app-skeleton-loader variant="row" [count]="6"></app-skeleton-loader>
+    <app-skeleton-loader variant="row" [count]="4"></app-skeleton-loader>
   </div>
 
   <div class="state-card error" *ngIf="!loading && errorMessage">
@@ -26,47 +29,79 @@
     <button class="btn btn-ghost" type="button" (click)="load()">Retry</button>
   </div>
 
-  <div class="empty" *ngIf="!loading && !errorMessage && list.length === 0">
-    No bookings yet.
+  <div class="empty orders-empty" *ngIf="!loading && !errorMessage && orderCards.length === 0">
+    <h3>No bookings yet</h3>
+    <p>Browse the latest inventory and create your first booking request when you are ready.</p>
+    <a routerLink="/vehicles"><button class="btn btn-ghost" type="button">Browse Vehicles</button></a>
   </div>
 
-  <table *ngIf="!loading && !errorMessage && list.length > 0">
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Vehicle</th>
-        <th>Dealer</th>
-        <th>Status</th>
-        <th>Payment</th>
-        <th>Amount</th>
-        <th>Delivery Date</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr *ngFor="let b of list">
-        <td>{{ b.id }}</td>
-        <td>{{ b.vehicleId }}</td>
-        <td>{{ b.dealerId }}</td>
-        <td><app-badge [value]="b.bookingStatus || 'PENDING'"></app-badge></td>
-        <td><app-badge [value]="b.paymentStatus || 'UNPAID'"></app-badge></td>
-        <td>{{ b.amount ?? '-' }}</td>
-        <td>{{ b.deliveryDate ? (b.deliveryDate | date: 'medium') : '-' }}</td>
-        <td>
-          <div class="actions">
-            <button class="btn btn-danger" [disabled]="!canCancel(b)" (click)="cancel(b.id!)">Cancel</button>
-            <button
-              *ngIf="canShowPay(b)"
-              class="btn"
-              [disabled]="!canPay(b)"
-              [title]="payTooltip(b)"
-              (click)="openPayment(b)"
-            >
-              Pay Now
-            </button>
+  <div class="orders-grid" *ngIf="!loading && !errorMessage && orderCards.length > 0">
+    <article class="order-card" *ngFor="let item of orderCards">
+      <div class="order-card-head">
+        <div class="head-copy">
+          <small class="order-id">Order #{{ item.booking.id }}</small>
+          <h3>{{ item.vehicle ? item.vehicle.brand + ' ' + item.vehicle.name : 'Vehicle #' + item.booking.vehicleId }}</h3>
+          <p>{{ item.dealer?.dealerName || ('Dealer #' + item.booking.dealerId) }}</p>
+        </div>
+
+        <div class="order-state">
+          <span class="status-pill" [class.cancelled]="displayBookingStatus(item.booking.bookingStatus) === 'Cancelled'">
+            {{ displayBookingStatus(item.booking.bookingStatus) }}
+          </span>
+          <span class="payment-pill" [class.paid]="displayPaymentStatus(item.booking.paymentStatus) === 'Paid'">
+            {{ displayPaymentStatus(item.booking.paymentStatus) }}
+          </span>
+        </div>
+      </div>
+
+      <div class="order-main">
+        <div class="thumb-wrap">
+          <img [src]="item.vehicle?.imageUrl || placeholderImage" [alt]="item.vehicle?.name || 'Vehicle image'" />
+        </div>
+
+        <div class="order-summary">
+          <div class="summary-row">
+            <span>Order value</span>
+            <strong>{{ formatCurrency(item.booking.amount) }}</strong>
           </div>
-        </td>
-      </tr>
-    </tbody>
-  </table>
+          <div class="summary-row">
+            <span>Quantity</span>
+            <strong>1</strong>
+          </div>
+          <div class="summary-row">
+            <span>Placed on</span>
+            <strong>{{ formatDate(item.booking.bookingDate || item.booking.createdAt) }}</strong>
+          </div>
+          <div class="summary-row">
+            <span>Delivery</span>
+            <strong>{{ formatDate(item.booking.deliveryDate, 'Not scheduled') }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="order-tracker" aria-label="Order progress">
+        <div class="tracker-step" *ngFor="let step of item.tracker" [class.active]="step.active" [class.current]="step.current">
+          <span class="tracker-dot"></span>
+          <span>{{ step.label }}</span>
+        </div>
+      </div>
+
+      <div class="order-actions">
+        <button class="btn btn-ghost" type="button" (click)="viewVehicle(item)">View</button>
+        <button class="btn btn-ghost" type="button" (click)="track(item)">Track</button>
+        <button class="btn btn-danger" type="button" [disabled]="!canCancel(item.booking)" (click)="cancel(item.booking.id!)">Cancel</button>
+        <button class="btn btn-ghost" type="button" [disabled]="!canDownloadInvoice(item.booking)" (click)="downloadInvoice(item)">Invoice</button>
+        <button
+          *ngIf="canShowPay(item.booking)"
+          class="btn"
+          type="button"
+          [disabled]="!canPay(item.booking)"
+          [title]="payTooltip(item.booking)"
+          (click)="openPayment(item.booking)"
+        >
+          Pay Now
+        </button>
+      </div>
+    </article>
+  </div>
 </section>

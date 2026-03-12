@@ -29,8 +29,14 @@
 }
 
 .feature-tabs .btn.active {
-  background: #dce8ff;
-  border-color: #b8caef;
+  background: color-mix(in srgb, var(--mm-primary-600) 18%, var(--mm-surface));
+  border-color: color-mix(in srgb, var(--mm-primary-600) 34%, var(--mm-border));
+  color: var(--mm-text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mm-primary-600) 12%, transparent);
+}
+
+.feature-tabs .btn.active:hover {
+  background: color-mix(in srgb, var(--mm-primary-600) 24%, var(--mm-surface));
 }
 
 .gallery-frame {

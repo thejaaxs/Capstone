@@ -30,9 +30,23 @@ export interface VerifyPaymentResult {
   transactionId: string;
 }
 
+export interface PaymentRequestPayload {
+  bookingId: number;
+  customerId: number;
+  amount: number;
+  method: 'UPI' | 'CREDIT_CARD' | 'NET_BANKING' | 'CASH_AT_DEALERSHIP' | string;
+}
+
+export interface PaymentStatusResponse {
+  paymentId?: number;
+  status: 'SUCCESS' | 'FAILED' | 'PENDING' | string;
+  transactionId?: string;
+  message?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PaymentsApiService {
-  private readonly base = `${environment.apiBaseUrl}/payments`;
+  private readonly base = `${environment.apiUrl}/payments`;
 
   constructor(private http: HttpClient) {}
 
@@ -53,5 +67,15 @@ export class PaymentsApiService {
 
   verifyPayment(payload: VerifyPaymentPayload): Observable<VerifyPaymentResult> {
     return this.http.post<VerifyPaymentResult>(`${this.base}/verify`, payload);
+  }
+
+  pay(payload: PaymentRequestPayload): Observable<PaymentStatusResponse> {
+    return this.http.post<PaymentStatusResponse>(`${this.base}/pay`, payload);
+  }
+
+  status(paymentId: number): Observable<PaymentStatusResponse> {
+    return this.http.get<PaymentStatusResponse>(`${this.base}/status`, {
+      params: { paymentId }
+    });
   }
 }

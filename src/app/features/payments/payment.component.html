@@ -5,7 +5,10 @@
 
     <div class="summary">
       <p><span>Booking ID</span><b>#{{ bookingId }}</b></p>
+      <p><span>Dealer</span><b>{{ dealerName || (booking?.dealerId ? ('Dealer #' + booking?.dealerId) : '-') }}</b></p>
+      <p><span>Bike</span><b>{{ vehicleLabel }}</b></p>
       <p><span>Customer ID</span><b>{{ customerId || '-' }}</b></p>
+      <p><span>Payable Amount</span><b>{{ trustedBookingAmount ? formatCurrency(trustedBookingAmount) : '-' }}</b></p>
       <p><span>Booking Status</span><b>{{ booking?.bookingStatus || '-' }}</b></p>
       <p><span>Payment Status</span><b>{{ booking?.paymentStatus || '-' }}</b></p>
     </div>
@@ -15,6 +18,7 @@
       <p>Card: 4111 1111 1111 1111</p>
       <p>CVV: 123</p>
       <p>OTP: 123456</p>
+      <p>For a dummy Razorpay success without bank OTP, choose UPI and use success&#64;razorpay.</p>
     </div>
 
     <div class="actions">
@@ -40,3 +44,12 @@
     </section>
   </article>
 </section>
+
+<app-demo-payment-modal
+  [open]="demoCheckoutOpen"
+  [amount]="trustedBookingAmount"
+  [bookingLabel]="'Booking #' + bookingId"
+  [note]="demoCheckoutMessage"
+  (closed)="closeDemoCheckout()"
+  (confirmed)="confirmDemoCheckout()"
+></app-demo-payment-modal>

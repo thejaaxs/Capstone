@@ -2,3 +2,12 @@
   background: var(--mm-surface-soft);
   color: var(--mm-text);
 }
+
+td.identity-cell strong,
+td.identity-cell small {
+  display: block;
+}
+
+td.identity-cell small {
+  color: var(--mm-text-muted);
+}

@@ -6,11 +6,13 @@ import { Subscription, interval, startWith, switchMap } from 'rxjs';
 import { BookingsApi } from '../../../api/bookings.service';
 import { CustomersApi } from '../../../api/customers.service';
 import { DealersApi } from '../../../api/dealers.service';
+import { ReviewsApi } from '../../../api/reviews.service';
 import { VehiclesApi } from '../../../api/vehicles.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { LoanInfoComponent } from '../../../shared/components/loan-info/loan-info.component';
 import { Booking } from '../../../shared/models/booking.model';
+import { Review } from '../../../shared/models/review.model';
 import { Vehicle } from '../../../shared/models/vehicle.model';
 import { EmiCalculatorComponent } from '../../../shared/components/emi-calculator/emi-calculator.component';
 import { BadgeComponent } from '../../../shared/ui/badge.component';
@@ -71,6 +73,43 @@ import { BadgeComponent } from '../../../shared/ui/badge.component';
               >
                 Pay Now (Card)
               </button>
+            </section>
+
+            <section class="reviews-panel">
+              <div class="reviews-head">
+                <div>
+                  <h3>Customer Reviews</h3>
+                  <p>See how other buyers rated this bike.</p>
+                </div>
+              </div>
+
+              <div class="state-card" *ngIf="reviewsLoading">
+                <div class="spinner"></div>
+                <p>Loading reviews...</p>
+              </div>
+
+              <div class="state-card error" *ngIf="!reviewsLoading && reviewsError">
+                <p>{{ reviewsError }}</p>
+                <button type="button" class="btn btn-ghost" (click)="reloadReviews()">Retry</button>
+              </div>
+
+              <div class="empty review-empty" *ngIf="!reviewsLoading && !reviewsError && reviews.length === 0">
+                No customer reviews yet for this bike.
+              </div>
+
+              <div class="reviews-list" *ngIf="!reviewsLoading && !reviewsError && reviews.length > 0">
+                <article class="review-card" *ngFor="let review of reviews">
+                  <div class="review-top">
+                    <strong>{{ review.title || 'Customer review' }}</strong>
+                    <span>Rating {{ review.rating }}/5</span>
+                  </div>
+                  <p class="review-meta">
+                    Customer #{{ review.customerId }}
+                    <span *ngIf="review.createdAt">| {{ review.createdAt | date:'dd MMM yyyy' }}</span>
+                  </p>
+                  <p class="review-comment">{{ review.comment || 'No written comment provided.' }}</p>
+                </article>
+              </div>
             </section>
           </div>
         </article>
@@ -234,6 +273,60 @@ import { BadgeComponent } from '../../../shared/ui/badge.component';
 	      color: var(--mm-danger);
 	    }
 
+    .reviews-panel {
+      border-top: 1px solid var(--mm-border);
+      padding-top: 0.95rem;
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .reviews-head h3 {
+      margin: 0;
+    }
+
+    .reviews-head p {
+      margin: 0.2rem 0 0;
+      color: var(--mm-text-muted);
+    }
+
+    .review-empty {
+      margin: 0;
+    }
+
+    .reviews-list {
+      display: grid;
+      gap: 0.7rem;
+    }
+
+    .review-card {
+      display: grid;
+      gap: 0.45rem;
+      padding: 0.85rem;
+      border-radius: 14px;
+      border: 1px solid var(--mm-border);
+      background: color-mix(in srgb, var(--mm-surface) 92%, var(--mm-primary-100));
+    }
+
+    .review-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+      color: var(--mm-text);
+    }
+
+    .review-top span,
+    .review-meta {
+      color: var(--mm-text-muted);
+      font-size: 0.84rem;
+    }
+
+    .review-comment {
+      margin: 0;
+      color: var(--mm-text);
+      line-height: 1.5;
+    }
+
     .confirm-overlay {
       position: fixed;
       inset: 0;
@@ -353,7 +446,8 @@ import { BadgeComponent } from '../../../shared/ui/badge.component';
       }
 
       .payment-next-step p,
-      .summary-line {
+      .summary-line,
+      .review-top {
         flex-direction: column;
         align-items: flex-start;
       }
@@ -398,6 +492,9 @@ export class VehicleDetailsComponent implements OnInit, OnDestroy {
   loading = false;
   errorMessage = '';
   placeholderImage = 'https://placehold.co/900x540/e5edf7/36597f?text=MotoMint';
+  reviews: Review[] = [];
+  reviewsLoading = false;
+  reviewsError = '';
   confirmBookingOpen = false;
   creatingBooking = false;
   bookingConfirmError = '';
@@ -416,6 +513,7 @@ export class VehicleDetailsComponent implements OnInit, OnDestroy {
     private bookingsApi: BookingsApi,
     private customersApi: CustomersApi,
     private dealersApi: DealersApi,
+    private reviewsApi: ReviewsApi,
     private vehiclesApi: VehiclesApi,
     private auth: AuthService,
     private toast: ToastService
@@ -439,10 +537,13 @@ export class VehicleDetailsComponent implements OnInit, OnDestroy {
 
     this.loading = true;
     this.errorMessage = '';
+    this.reviews = [];
+    this.reviewsError = '';
     this.vehiclesApi.getById(this.vehicleId).subscribe({
       next: (res) => {
         this.vehicle = res;
         this.resolveDealerName(res.dealerId);
+        this.loadReviews(res.name);
       },
       error: (err: HttpErrorResponse) => {
         const msg = typeof err.error === 'string' ? err.error : err.error?.message;
@@ -533,6 +634,11 @@ export class VehicleDetailsComponent implements OnInit, OnDestroy {
     });
   }
 
+  reloadReviews() {
+    if (!this.vehicle?.name) return;
+    this.loadReviews(this.vehicle.name);
+  }
+
   openEmiCalculator() {
     if (this.confirmBookingOpen) {
       this.confirmBookingOpen = false;
@@ -594,6 +700,35 @@ export class VehicleDetailsComponent implements OnInit, OnDestroy {
         this.dealerName = '';
       }
     });
+  }
+
+  private loadReviews(productName: string) {
+    if (!productName.trim()) {
+      this.reviews = [];
+      this.reviewsError = '';
+      return;
+    }
+
+    this.reviewsLoading = true;
+    this.reviewsError = '';
+    this.reviewsApi.byProductName(productName).subscribe({
+      next: (rows) => {
+        this.reviews = [...rows].sort((a, b) => this.reviewTimestamp(b.createdAt) - this.reviewTimestamp(a.createdAt));
+      },
+      error: (err: HttpErrorResponse) => {
+        const msg = typeof err.error === 'string' ? err.error : err.error?.message;
+        this.reviews = [];
+        this.reviewsError = msg || 'Failed to load customer reviews.';
+      },
+      complete: () => {
+        this.reviewsLoading = false;
+      }
+    });
+  }
+
+  private reviewTimestamp(value?: string): number {
+    const timestamp = value ? new Date(value).getTime() : 0;
+    return Number.isFinite(timestamp) ? timestamp : 0;
   }
 
   private resolveCustomerId() {

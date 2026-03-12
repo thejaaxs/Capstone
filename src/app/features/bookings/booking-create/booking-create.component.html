@@ -3,6 +3,21 @@
     <h2>Create Booking</h2>
     <p class="section-subtitle">Pick customer, dealer and vehicle to complete a new booking.</p>
 
+    <section class="booking-summary-card">
+      <div>
+        <span>Dealer</span>
+        <strong>{{ selectedDealer?.dealerName || 'Select dealer' }}</strong>
+      </div>
+      <div>
+        <span>Bike</span>
+        <strong>{{ selectedVehicleLabel }}</strong>
+      </div>
+      <div>
+        <span>Booking Amount</span>
+        <strong>{{ hasLockedAmount ? formatCurrency(lockedAmount) : 'Waiting for bike selection' }}</strong>
+      </div>
+    </section>
+
     <form (ngSubmit)="submit()" #f="ngForm" class="form-grid">
     <label for="customerId">Customer</label>
     <select
@@ -40,16 +55,25 @@
     </select>
     <ng-template #vehicleManual>
       <small>No vehicles found for selected dealer. Enter Vehicle ID manually.</small>
-      <input id="vehicleId" type="number" [(ngModel)]="model.vehicleId" name="vehicleIdManual" required min="1" />
+      <input
+        id="vehicleId"
+        type="number"
+        [(ngModel)]="model.vehicleId"
+        name="vehicleIdManual"
+        required
+        min="1"
+        (ngModelChange)="selectVehicle($event)"
+      />
     </ng-template>
 
     <label for="amount">Amount</label>
-    <input id="amount" type="number" [(ngModel)]="model.amount" name="amount" min="0" />
+    <input id="amount" type="number" [ngModel]="lockedAmount" name="amount" min="0" readonly />
+    <small>Amount is locked from the selected bike.</small>
 
     <label for="deliveryDate">Delivery Date</label>
     <input id="deliveryDate" type="datetime-local" [(ngModel)]="model.deliveryDate" name="deliveryDate" />
 
-    <button class="btn" type="submit" [disabled]="f.invalid || loading">
+    <button class="btn" type="submit" [disabled]="f.invalid || loading || !hasLockedAmount">
       {{ loading ? 'Creating...' : 'Create Booking' }}
     </button>
     </form>

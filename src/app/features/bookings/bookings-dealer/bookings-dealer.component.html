@@ -34,7 +34,8 @@
       <tr>
         <th>ID</th>
         <th>Customer</th>
-        <th>Vehicle</th>
+        <th>Dealer</th>
+        <th>Bike</th>
         <th>Status</th>
         <th>Payment</th>
         <th>Amount</th>
@@ -45,11 +46,21 @@
     <tbody>
       <tr *ngFor="let b of list">
         <td>{{ b.id }}</td>
-        <td>{{ b.customerId }}</td>
-        <td>{{ b.vehicleId }}</td>
+        <td class="identity-cell">
+          <strong>{{ getCustomerLabel(b.customerId) }}</strong>
+          <small>ID: {{ b.customerId }}</small>
+        </td>
+        <td class="identity-cell">
+          <strong>{{ getDealerLabel(b.dealerId) }}</strong>
+          <small>ID: {{ b.dealerId }}</small>
+        </td>
+        <td class="identity-cell">
+          <strong>{{ getVehicleLabel(b.vehicleId) }}</strong>
+          <small>ID: {{ b.vehicleId }}</small>
+        </td>
         <td><app-badge [value]="b.bookingStatus || 'PENDING'"></app-badge></td>
         <td><app-badge [value]="b.paymentStatus || 'UNPAID'"></app-badge></td>
-        <td>{{ b.amount ?? '-' }}</td>
+        <td>{{ formatCurrency(b.amount) }}</td>
         <td>{{ b.deliveryDate ? (b.deliveryDate | date: 'medium') : '-' }}</td>
         <td>
           <div class="table-actions">

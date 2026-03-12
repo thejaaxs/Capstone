@@ -33,9 +33,9 @@ interface NavItem {
 		          </span>
 		        </a>
 
-	        <a *ngIf="!isAuthenticated" routerLink="/login" class="guest-login-link btn btn-ghost" (click)="closeAllMenus()">
-	          Login
-	        </a>
+	        <button *ngIf="!isAuthenticated" type="button" class="guest-login-link btn btn-ghost" (click)="openSignIn()">
+	          Sign In
+	        </button>
 
 	        <button
 	          *ngIf="!isAuthenticated"
@@ -110,8 +110,16 @@ interface NavItem {
           </button>
 
           <div class="profile-menu" *ngIf="profileOpen">
-            <button type="button" class="btn btn-ghost" (click)="goHome()">Home</button>
-            <button type="button" class="btn btn-danger" (click)="logout()">Logout</button>
+            <ng-container *ngIf="role === 'ROLE_CUSTOMER'; else defaultProfileMenu">
+              <button type="button" class="btn btn-ghost" (click)="goCustomerOrders()">My Orders</button>
+              <button type="button" class="btn btn-ghost" (click)="goCustomerFavorites()">Favorites</button>
+              <button type="button" class="btn btn-danger" (click)="logout()">Logout</button>
+            </ng-container>
+
+            <ng-template #defaultProfileMenu>
+              <button type="button" class="btn btn-ghost" (click)="goHome()">Home</button>
+              <button type="button" class="btn btn-danger" (click)="logout()">Logout</button>
+            </ng-template>
           </div>
         </div>
       </div>
@@ -230,6 +238,18 @@ export class TopNavComponent implements OnInit, OnDestroy {
     this.router.navigateByUrl('/dealer/bookings');
   }
 
+  openSignIn() {
+    this.closeAllMenus();
+    const currentUrl = this.router.url;
+    const returnUrl = this.auth.isSafeReturnUrl(currentUrl) && !['/login', '/register'].includes(currentUrl.split('?')[0])
+      ? currentUrl
+      : null;
+
+    this.router.navigate(['/login'], {
+      queryParams: returnUrl ? { returnUrl } : undefined
+    });
+  }
+
   logout() {
     if (this.notificationsStarted) {
       this.dealerNotificationsService.stop();
@@ -243,6 +263,16 @@ export class TopNavComponent implements OnInit, OnDestroy {
   goHome() {
     this.closeAllMenus();
     this.router.navigateByUrl(this.auth.getHomeRoute(this.role));
+  }
+
+  goCustomerOrders() {
+    this.closeAllMenus();
+    this.router.navigateByUrl('/customer/bookings');
+  }
+
+  goCustomerFavorites() {
+    this.closeAllMenus();
+    this.router.navigateByUrl('/customer/favorites');
   }
 
   closeAllMenus() {
@@ -260,26 +290,33 @@ export class TopNavComponent implements OnInit, OnDestroy {
     if (role === 'ROLE_CUSTOMER') {
       return [
         { label: 'Vehicles', path: '/customer/vehicles' },
+        { label: 'Dealers', path: '/customer/dealers' },
+        { label: 'Test Ride', path: '/customer/test-ride' },
+        { label: 'Loan', path: '/customer/loan' },
         { label: 'Bookings', path: '/customer/bookings' },
-        { label: 'Favorites', path: '/customer/favorites' },
-        { label: 'Reviews', path: '/customer/reviews' },
+        { label: 'Delivery', path: '/customer/delivery' },
       ];
     }
 
     if (role === 'ROLE_DEALER') {
       return [
+        { label: 'Dashboard', path: '/dealer/dashboard' },
         { label: 'Vehicles', path: '/dealer/vehicles' },
-        { label: 'Booking Requests', path: '/dealer/booking-requests' },
+        { label: 'Test Rides', path: '/dealer/test-rides' },
         { label: 'Bookings', path: '/dealer/bookings' },
+        { label: 'Loans', path: '/dealer/loan-approvals' },
+        { label: 'Delivery', path: '/dealer/delivery' },
       ];
     }
 
-	        if (role === 'ROLE_ADMIN') {
-	      return [
-	        { label: 'Dealers', path: '/admin/dealers' },
-	        { label: 'Customers', path: '/admin/customers' },
-	      ];
-	    }
+    if (role === 'ROLE_ADMIN') {
+      return [
+        { label: 'Analytics', path: '/admin/analytics' },
+        { label: 'Dealers', path: '/admin/dealers' },
+        { label: 'Vehicles', path: '/admin/vehicles' },
+        { label: 'Payments', path: '/admin/payments' },
+      ];
+    }
 	
 	    return [];
 	  }

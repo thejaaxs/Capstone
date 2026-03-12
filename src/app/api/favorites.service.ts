@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class FavoritesApi {
-  private base = `${environment.apiBaseUrl}/favorites`;
+  private base = `${environment.apiUrl}/favorites`;
 
   constructor(private http: HttpClient) {}
 
@@ -14,12 +14,24 @@ export class FavoritesApi {
     return this.http.get<Favorite[]>(`${this.base}/list`);
   }
 
-  add(fav: Favorite): Observable<string> {
-    return this.http.post(`${this.base}/add`, fav, { responseType: 'text' });
+  add(fav: Favorite): Observable<Favorite> {
+    return this.http.post<Favorite>(`${this.base}/add`, fav);
+  }
+
+  getById(id: number): Observable<Favorite> {
+    return this.http.get<Favorite>(`${this.base}/${id}`);
   }
 
   updateByName(name: string, fav: Favorite): Observable<string> {
     return this.http.put(`${this.base}/updateByName?name=${encodeURIComponent(name)}`, fav, { responseType: 'text' });
+  }
+
+  updateById(id: number, fav: Favorite): Observable<Favorite> {
+    return this.http.put<Favorite>(`${this.base}/${id}`, fav);
+  }
+
+  deleteById(id: number): Observable<string> {
+    return this.http.delete(`${this.base}/${id}`, { responseType: 'text' });
   }
 
   deleteByName(name: string): Observable<string> {

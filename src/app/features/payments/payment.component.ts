@@ -3,15 +3,19 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { BookingsApi } from '../../api/bookings.service';
+import { DealersApi } from '../../api/dealers.service';
 import {
+  CreatePaymentOrderResponse,
   PaymentsApiService,
   VerifyPaymentResult,
   VerifyPaymentPayload
 } from '../../api/payments.api';
-import { CustomersApi } from '../../api/customers.service';
+import { VehiclesApi } from '../../api/vehicles.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { Booking } from '../../shared/models/booking.model';
+import { Vehicle } from '../../shared/models/vehicle.model';
+import { DemoPaymentModalComponent } from '../../shared/components/demo-payment-modal/demo-payment-modal.component';
 
 declare var Razorpay: any;
 
@@ -26,7 +30,7 @@ const MOCK_PAYMENT_SIGNATURE = 'mock_signature';
 @Component({
   selector: 'app-payment',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, DemoPaymentModalComponent],
   templateUrl: './payment.component.html',
   styleUrl: './payment.component.css'
 })
@@ -42,6 +46,11 @@ export class PaymentComponent implements OnInit, OnDestroy {
   verifyResult: VerifyPaymentResult | null = null;
   redirectInSeconds = 0;
   booking?: Booking;
+  dealerName = '';
+  vehicle?: Vehicle;
+  demoCheckoutOpen = false;
+  demoCheckoutMessage = '';
+  private demoOrder?: CreatePaymentOrderResponse;
 
   private prefillEmail = '';
   private prefillContact = '';
@@ -52,15 +61,16 @@ export class PaymentComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private router: Router,
     private bookingsApi: BookingsApi,
+    private dealersApi: DealersApi,
     private paymentsApi: PaymentsApiService,
-    private customersApi: CustomersApi,
+    private vehiclesApi: VehiclesApi,
     private auth: AuthService,
     private toast: ToastService
   ) {}
 
   ngOnInit(): void {
     this.bookingId = Number(this.route.snapshot.paramMap.get('bookingId') || '0');
-    this.customerId = Number(this.route.snapshot.queryParamMap.get('customerId') || '0');
+    this.customerId = Number(this.route.snapshot.queryParamMap.get('customerId') || this.auth.getCustomerId() || '0');
     this.resolveBookingContext();
   }
 
@@ -78,6 +88,9 @@ export class PaymentComponent implements OnInit, OnDestroy {
     this.errorMsg = '';
     this.successMsg = '';
     this.verifyResult = null;
+    this.demoCheckoutOpen = false;
+    this.demoCheckoutMessage = '';
+    this.demoOrder = undefined;
     this.clearRedirectTimers();
 
     if (!this.bookingId) {
@@ -113,19 +126,15 @@ export class PaymentComponent implements OnInit, OnDestroy {
 
     this.loading = true;
     this.paymentsApi.createOrder(this.bookingId, this.customerId).subscribe({
-      next: (order) => {
+        next: (order) => {
         this.loading = false;
 
+        if (this.hasAmountMismatch(order.amountInPaise)) {
+          this.toast.info(this.buildAmountMismatchMessage(order.amountInPaise));
+        }
+
         if (order.mockMode) {
-          if (!order.razorpayOrderId) {
-            this.errorMsg = 'Invalid payment order received from server.';
-            this.toast.error(this.errorMsg);
-            return;
-          }
-          if (order.message) {
-            this.toast.info(order.message);
-          }
-          this.verifyPayment(this.buildMockPaymentResponse(order.razorpayOrderId));
+          this.openDemoCheckout(order);
           return;
         }
 
@@ -144,7 +153,7 @@ export class PaymentComponent implements OnInit, OnDestroy {
           order_id: order.razorpayOrderId,
           method: {
             card: true,
-            upi: false,
+            upi: true,
             netbanking: false,
             wallet: false,
             emi: false
@@ -181,6 +190,27 @@ export class PaymentComponent implements OnInit, OnDestroy {
   goToBookings() {
     this.clearRedirectTimers();
     this.router.navigateByUrl('/customer/bookings');
+  }
+
+  closeDemoCheckout() {
+    this.demoCheckoutOpen = false;
+    this.demoCheckoutMessage = '';
+    this.demoOrder = undefined;
+    this.toast.info('Payment cancelled.');
+  }
+
+  confirmDemoCheckout() {
+    const orderId = this.demoOrder?.razorpayOrderId;
+    if (!orderId) {
+      this.demoCheckoutOpen = false;
+      this.errorMsg = 'Invalid payment order received from server.';
+      this.toast.error(this.errorMsg);
+      return;
+    }
+
+    this.demoCheckoutOpen = false;
+    this.loading = true;
+    this.verifyPayment(this.buildMockPaymentResponse(orderId));
   }
 
   private verifyPayment(response: RazorpaySuccessResponse) {
@@ -223,26 +253,6 @@ export class PaymentComponent implements OnInit, OnDestroy {
     };
   }
 
-  private resolveCustomer() {
-    const email = (this.auth.getEmail() || '').toLowerCase();
-    if (!email) return;
-
-    this.resolvingCustomer = true;
-    this.customersApi.list().subscribe({
-      next: (rows) => {
-        const matched = rows.find((c) => c.email?.toLowerCase() === email);
-        if (!matched?.customerId) return;
-        this.customerId = matched.customerId;
-        this.prefillEmail = matched.email || '';
-        this.prefillContact = matched.contactNumber || '';
-      },
-      error: () => {},
-      complete: () => {
-        this.resolvingCustomer = false;
-      }
-    });
-  }
-
   private resolveBookingContext() {
     if (!this.bookingId || Number.isNaN(this.bookingId)) {
       this.errorMsg = 'Invalid booking id.';
@@ -253,8 +263,10 @@ export class PaymentComponent implements OnInit, OnDestroy {
     this.bookingsApi.getById(this.bookingId).subscribe({
       next: (booking) => {
         this.booking = booking;
+        this.resolveBookingSummary(booking);
         if (booking?.customerId) {
           this.customerId = booking.customerId;
+          this.auth.setCustomerId(booking.customerId);
         }
         if (this.isAlreadyPaid()) {
           this.successMsg = 'This booking is already paid.';
@@ -268,22 +280,11 @@ export class PaymentComponent implements OnInit, OnDestroy {
       },
       complete: () => {
         this.loadingBooking = false;
-        if (!this.customerId) {
-          this.resolveCustomer();
-          return;
+        this.prefillEmail = this.auth.getEmail() || '';
+        if (this.customerId) {
+          this.auth.setCustomerId(this.customerId);
         }
-        this.resolvePrefillForKnownCustomer(this.customerId);
       }
-    });
-  }
-
-  private resolvePrefillForKnownCustomer(customerId: number) {
-    this.customersApi.get(customerId).subscribe({
-      next: (customer) => {
-        this.prefillEmail = customer.email || '';
-        this.prefillContact = customer.contactNumber || '';
-      },
-      error: () => {}
     });
   }
 
@@ -339,5 +340,76 @@ export class PaymentComponent implements OnInit, OnDestroy {
 
   private isBookingApproved(): boolean {
     return (this.booking?.bookingStatus || '').toUpperCase() === 'ACCEPTED';
+  }
+
+  get vehicleLabel(): string {
+    if (!this.vehicle) return this.booking?.vehicleId ? `Vehicle #${this.booking.vehicleId}` : '-';
+    return `${this.vehicle.brand} ${this.vehicle.name}`;
+  }
+
+  get trustedBookingAmount(): number {
+    const amount = Number(this.booking?.amount || 0);
+    return Number.isFinite(amount) && amount > 0 ? amount : 0;
+  }
+
+  formatCurrency(amount?: number): string {
+    const value = Number(amount || 0);
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(value);
+  }
+
+  private resolveBookingSummary(booking: Booking): void {
+    this.dealerName = '';
+    this.vehicle = undefined;
+
+    this.dealersApi.get(booking.dealerId).subscribe({
+      next: (dealer) => {
+        this.dealerName = dealer.dealerName || `Dealer #${booking.dealerId}`;
+      },
+      error: () => {
+        this.dealerName = `Dealer #${booking.dealerId}`;
+      }
+    });
+
+    this.vehiclesApi.getById(booking.vehicleId).subscribe({
+      next: (vehicle) => {
+        this.vehicle = vehicle;
+      },
+      error: () => {
+        this.vehicle = undefined;
+      }
+    });
+  }
+
+  private getTrustedAmountInPaise(): number {
+    return this.trustedBookingAmount > 0 ? Math.round(this.trustedBookingAmount * 100) : 0;
+  }
+
+  private hasAmountMismatch(orderAmountInPaise: number): boolean {
+    const trustedAmountInPaise = this.getTrustedAmountInPaise();
+    if (!trustedAmountInPaise || !orderAmountInPaise) {
+      return false;
+    }
+    return trustedAmountInPaise !== orderAmountInPaise;
+  }
+
+  private buildAmountMismatchMessage(orderAmountInPaise: number): string {
+    return `Razorpay will open with ${this.formatCurrency(orderAmountInPaise / 100)} for this checkout. Booking total remains ${this.formatCurrency(this.trustedBookingAmount)}.`;
+  }
+
+  private openDemoCheckout(order: CreatePaymentOrderResponse): void {
+    if (!order.razorpayOrderId) {
+      this.errorMsg = 'Invalid payment order received from server.';
+      this.toast.error(this.errorMsg);
+      return;
+    }
+
+    this.loading = false;
+    this.demoOrder = order;
+    this.demoCheckoutMessage = order.message || 'Demo payment mode is enabled for this transaction.';
+    this.demoCheckoutOpen = true;
   }
 }

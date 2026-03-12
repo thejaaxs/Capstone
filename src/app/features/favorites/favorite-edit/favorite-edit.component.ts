@@ -14,7 +14,7 @@ import { HttpErrorResponse } from '@angular/common/http';
   styleUrl: './favorite-edit.component.css'
 })
 export class FavoriteEditComponent implements OnInit {
-  oldName = '';
+  favoriteId = 0;
   model!: Favorite;
   loaded = false;
   saving = false;
@@ -27,10 +27,15 @@ export class FavoriteEditComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    this.oldName = decodeURIComponent(this.route.snapshot.paramMap.get('dealerName') || '');
-    this.api.byName(this.oldName).subscribe({
+    this.favoriteId = Number(this.route.snapshot.paramMap.get('id'));
+    if (!this.favoriteId || Number.isNaN(this.favoriteId)) {
+      this.toast.error('Invalid favorite id.');
+      this.router.navigateByUrl('/customer/favorites');
+      return;
+    }
+    this.api.getById(this.favoriteId).subscribe({
       next: (res) => {
-        this.model = res[0];
+        this.model = res;
         this.loaded = true;
       },
       error: (err: HttpErrorResponse) => {
@@ -43,7 +48,7 @@ export class FavoriteEditComponent implements OnInit {
 
   submit() {
     this.saving = true;
-    this.api.updateByName(this.oldName, this.model).subscribe({
+    this.api.updateById(this.favoriteId, this.model).subscribe({
       next: () => {
         this.toast.success('Updated');
         this.router.navigateByUrl('/customer/favorites');

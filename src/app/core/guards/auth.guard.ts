@@ -6,12 +6,12 @@ export const authGuard: CanActivateFn = (_, state) => {
   const auth = inject(AuthService);
   const router = inject(Router);
   if (!auth.isLoggedIn()) {
-    router.navigateByUrl('/login');
-    return false;
+    return router.createUrlTree(['/login'], {
+      queryParams: auth.isSafeReturnUrl(state.url) ? { returnUrl: state.url } : undefined
+    });
   }
   if (state.url === '' || state.url === '/') {
-    router.navigateByUrl(auth.getHomeRoute());
-    return false;
+    return router.parseUrl(auth.getHomeRoute());
   }
   return true;
 };

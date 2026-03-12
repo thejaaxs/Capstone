@@ -36,7 +36,7 @@ export interface VerifyRes {
 
 @Injectable({ providedIn: 'root' })
 export class PaymentsApi {
-  private base = `${environment.apiBaseUrl}/payments`;
+  private base = `${environment.apiUrl}/payments`;
 
   constructor(private http: HttpClient) {}
 

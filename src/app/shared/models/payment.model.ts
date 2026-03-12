@@ -8,6 +8,7 @@ export interface Payment {
   transactionId?: string;
   paymentDate?: string;
   message?: string;
+  invoiceNumber?: string;
 }
 
 export interface CreateRazorpayOrderRequest {

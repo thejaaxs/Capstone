@@ -28,9 +28,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 
           <label>Rating</label>
           <div class="rating-field">
-            <input class="rating-input" type="number" [(ngModel)]="model.rating" name="rating" min="1" max="10" step="1" />
-            <small>1-10</small>
+            <input class="rating-input" type="number" [(ngModel)]="model.rating" name="rating" #ratingCtrl="ngModel" min="1" max="5" step="1" />
+            <small>1-5</small>
           </div>
+          <small class="field-error" *ngIf="ratingCtrl.invalid && (ratingCtrl.touched || f.submitted)">
+            Rating must be between 1 and 5.
+          </small>
 
           <label>Title</label>
           <input [(ngModel)]="model.title" name="title" />
@@ -38,7 +41,7 @@ import { HttpErrorResponse } from '@angular/common/http';
           <label>Comment</label>
           <textarea [(ngModel)]="model.comment" name="comment"></textarea>
 
-          <button class="btn" type="submit" [disabled]="saving">{{ saving ? 'Updating...' : 'Update' }}</button>
+          <button class="btn" type="submit" [disabled]="saving || !isValidRatingValue(model.rating)">{{ saving ? 'Updating...' : 'Update' }}</button>
         </form>
       </article>
     </section>
@@ -79,13 +82,21 @@ export class ReviewEditComponent implements OnInit {
   }
 
   submit() {
-    if (typeof this.model.rating === 'number' && (this.model.rating < 1 || this.model.rating > 10)) {
-      this.toast.error('Rating must be between 1 and 10.');
+    const rating = this.normalizeRating(this.model.rating);
+    if (rating === null) {
+      this.toast.error('Rating must be between 1 and 5.');
       return;
     }
+    const payload: Partial<Review> = {
+      ...this.model,
+      rating,
+      productName: this.model.productName?.trim(),
+      title: this.model.title?.trim(),
+      comment: this.model.comment?.trim(),
+    };
 
     this.saving = true;
-    this.api.update(this.id, this.model).subscribe({
+    this.api.update(this.id, payload).subscribe({
       next: () => {
         this.toast.success('Updated');
         this.router.navigateByUrl('/customer/reviews');
@@ -97,12 +108,31 @@ export class ReviewEditComponent implements OnInit {
           return;
         }
         const backendMessage = typeof err.error === 'string' ? err.error : err.error?.message;
-        this.toast.error(backendMessage || 'Update failed');
+        this.toast.error(this.getFriendlyReviewError(backendMessage));
       },
       complete: () => {
         this.saving = false;
       },
     });
+  }
+
+  isValidRatingValue(value: unknown): boolean {
+    return this.normalizeRating(value) !== null;
+  }
+
+  private normalizeRating(value: unknown): number | null {
+    const rating = Number(value);
+    if (!Number.isFinite(rating)) return null;
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return null;
+    return rating;
+  }
+
+  private getFriendlyReviewError(message?: string): string {
+    const normalized = (message || '').toLowerCase();
+    if (normalized.includes('rating')) {
+      return 'Rating must be between 1 and 5.';
+    }
+    return message || 'Update failed';
   }
 }
 

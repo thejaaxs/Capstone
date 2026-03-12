@@ -29,8 +29,8 @@ const INR_SYMBOL = '\u20B9';
             type="number"
             min="0"
             [ngModel]="vehiclePrice"
-            (ngModelChange)="vehiclePrice = toNonNegativeNumber($event)"
             placeholder="Enter vehicle price"
+            readonly
           />
         </label>
 

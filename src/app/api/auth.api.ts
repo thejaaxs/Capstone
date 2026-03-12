@@ -5,7 +5,7 @@ import { AuthResponse, LoginRequest, RegisterRequest, InternalUserResponse } fro
 
 @Injectable({ providedIn: 'root' })
 export class AuthApi {
-  private base = `${environment.apiBaseUrl}/auth`;
+  private base = `${environment.apiUrl}/auth`;
 
   constructor(private http: HttpClient) {}
 

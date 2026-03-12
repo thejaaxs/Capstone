@@ -77,8 +77,14 @@ import { SkeletonLoaderComponent } from '../../../shared/ui/skeleton-loader.comp
             <td>{{ f.dealerId }}</td>
             <td>
               <div class="table-actions">
-                <a [routerLink]="['/customer/favorites/edit', f.dealerName]"><button class="btn btn-ghost" type="button">Edit</button></a>
-                <button class="btn btn-danger" type="button" (click)="delByName(f.dealerName)">Delete</button>
+                <a
+                  [routerLink]="['/customer/bookings/create']"
+                  [queryParams]="buildBookingQueryParams(f)"
+                >
+                  <button class="btn" type="button">Book This Bike</button>
+                </a>
+                <a [routerLink]="['/customer/favorites/edit', f.id]"><button class="btn btn-ghost" type="button">Edit</button></a>
+                <button class="btn btn-danger" type="button" (click)="del(f)">Delete</button>
               </div>
             </td>
           </tr>
@@ -172,9 +178,26 @@ export class FavoritesListComponent implements OnInit {
     });
   }
 
-  delByName(name: string) {
-    if (!confirm(`Delete dealer '${name}' from favorites?`)) return;
-    this.api.deleteByName(name).subscribe(() => {
+  buildBookingQueryParams(favorite: Favorite): Record<string, string | number> {
+    const params: Record<string, string | number> = {
+      dealerId: favorite.dealerId,
+    };
+
+    if (favorite.productName?.trim()) {
+      params['productName'] = favorite.productName.trim();
+    }
+
+    return params;
+  }
+
+  del(favorite: Favorite) {
+    if (!favorite.id) {
+      this.toast.error('Favorite id is missing.');
+      return;
+    }
+    const label = favorite.productName ? `${favorite.dealerName} - ${favorite.productName}` : favorite.dealerName;
+    if (!confirm(`Delete favorite '${label}'?`)) return;
+    this.api.deleteById(favorite.id).subscribe(() => {
       this.toast.success('Deleted');
       this.load();
     }, (err: HttpErrorResponse) => {

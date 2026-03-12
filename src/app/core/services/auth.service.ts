@@ -19,9 +19,10 @@ interface ProfileContextState {
 export class AuthService {
   private readonly roleHomeMap: Record<UserRole, string> = {
     ROLE_CUSTOMER: '/customer/vehicles',
-    ROLE_DEALER: '/dealer/vehicles',
-    ROLE_ADMIN: '/forbidden',
+    ROLE_DEALER: '/dealer/dashboard',
+    ROLE_ADMIN: '/admin/analytics',
   };
+  private readonly publicReturnPrefixes = ['/home', '/vehicles'];
 
   getState(): JwtAuthState | null {
     const raw = localStorage.getItem(KEY);
@@ -48,9 +49,13 @@ export class AuthService {
     localStorage.removeItem(PROFILE_KEY);
   }
 
-  logout() {
+  clearSession() {
     localStorage.removeItem(KEY);
     localStorage.removeItem(PROFILE_KEY);
+  }
+
+  logout() {
+    this.clearSession();
   }
 
   getToken(): string | null {
@@ -68,6 +73,35 @@ export class AuthService {
   getHomeRoute(role = this.getRole()): string {
     if (!role) return '/login';
     return this.roleHomeMap[role] ?? '/login';
+  }
+
+  isSafeReturnUrl(url: string | null | undefined): url is string {
+    return typeof url === 'string' && url.startsWith('/') && !url.startsWith('//');
+  }
+
+  resolvePostLoginUrl(returnUrl: string | null | undefined, role = this.getRole()): string {
+    if (!role) return '/login';
+    if (!this.isSafeReturnUrl(returnUrl)) {
+      return this.getHomeRoute(role);
+    }
+
+    if (this.publicReturnPrefixes.some((prefix) => returnUrl === prefix || returnUrl.startsWith(`${prefix}?`))) {
+      return returnUrl;
+    }
+
+    if (role === 'ROLE_CUSTOMER' && returnUrl.startsWith('/customer/')) {
+      return returnUrl;
+    }
+
+    if (role === 'ROLE_DEALER' && returnUrl.startsWith('/dealer/')) {
+      return returnUrl;
+    }
+
+    // if (role === 'ROLE_ADMIN' && returnUrl.startsWith('/admin/')) {
+    //   return returnUrl;
+    // }
+
+    return this.getHomeRoute(role);
   }
 
   getDealerId(): number | null {

@@ -2,6 +2,19 @@
   display: block;
 }
 
+td.identity-cell {
+  min-width: 160px;
+}
+
+td.identity-cell strong,
+td.identity-cell small {
+  display: block;
+}
+
+td.identity-cell small {
+  color: var(--mm-text-muted);
+}
+
 td:last-child {
   white-space: nowrap;
 }

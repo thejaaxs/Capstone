@@ -3,12 +3,14 @@ import { catchError, throwError } from 'rxjs';
 import { inject } from '@angular/core';
 import { ToastService } from '../services/toast.service';
 import { Router } from '@angular/router';
+import { AuthService } from '../services/auth.service';
 
 export const SKIP_GLOBAL_ERROR_HANDLING = new HttpContextToken<boolean>(() => false);
 
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const router = inject(Router);
+  const auth = inject(AuthService);
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
@@ -37,8 +39,21 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       } else if (err.status === 409 || normalized.includes('already registered') || normalized.includes('duplicate')) {
         toast.error('Email already registered. Please login.');
       } else if (err.status === 401) {
-        toast.error('Unauthorized. Please login and try again.');
-        router.navigateByUrl('/login');
+        const currentPath = router.url.split('?')[0];
+        const returnUrl = auth.isSafeReturnUrl(router.url) && !['/login', '/register'].includes(currentPath)
+          ? router.url
+          : null;
+
+        if (auth.isLoggedIn()) {
+          auth.clearSession();
+          toast.info('Your session expired. Please login to continue.');
+        } else {
+          toast.info('Please login to continue.');
+        }
+
+        router.navigate(['/login'], {
+          queryParams: returnUrl ? { returnUrl } : undefined
+        });
       } else if (err.status === 403) {
         toast.error(rawMessage || 'Forbidden. You do not have permission for this action.');
         router.navigateByUrl('/forbidden');

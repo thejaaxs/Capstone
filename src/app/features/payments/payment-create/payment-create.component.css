@@ -7,9 +7,39 @@
   margin-inline: auto;
 }
 
+.payment-summary-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--mm-primary-600) 18%, var(--mm-border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--mm-primary-600) 8%, var(--mm-surface));
+}
+
+.payment-summary-card div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.payment-summary-card span {
+  color: var(--mm-text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.payment-summary-card strong {
+  color: var(--mm-text);
+}
+
 form {
   display: grid;
   gap: 0.55rem;
+}
+
+.card small {
+  color: var(--mm-text-muted);
 }
 
 .result {
@@ -22,4 +52,10 @@ form {
 
 .result p {
   margin: 0.2rem 0;
+}
+
+@media (max-width: 720px) {
+  .payment-summary-card {
+    grid-template-columns: 1fr;
+  }
 }

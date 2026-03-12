@@ -8,7 +8,7 @@
     </div>
 
     <form *ngIf="loaded" (ngSubmit)="submit()" #f="ngForm">
-      <p class="section-subtitle">Updating dealer by old name: <b>{{ oldName }}</b></p>
+      <p class="section-subtitle">Editing favorite entry: <b>#{{ favoriteId }}</b></p>
 
       <label for="customerId">Customer ID</label>
       <input id="customerId" type="number" [(ngModel)]="model.customerId" name="customerId" required />

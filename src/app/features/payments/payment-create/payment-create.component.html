@@ -3,6 +3,21 @@
     <h2>Make Payment</h2>
     <p class="section-subtitle">Complete payment for confirmed bookings securely.</p>
 
+    <section class="payment-summary-card" *ngIf="selectedBooking as booking">
+      <div>
+        <span>Dealer</span>
+        <strong>{{ selectedDealer?.dealerName || ('Dealer #' + booking.dealerId) }}</strong>
+      </div>
+      <div>
+        <span>Bike</span>
+        <strong>{{ selectedVehicleLabel }}</strong>
+      </div>
+      <div>
+        <span>Payable Amount</span>
+        <strong>{{ lockedAmount ? formatCurrency(lockedAmount) : '-' }}</strong>
+      </div>
+    </section>
+
     <form (ngSubmit)="submit()" #f="ngForm">
       <label for="customerId">Customer</label>
       <select id="customerId" [(ngModel)]="model.customerId" name="customerId" required (ngModelChange)="loadBookings()">
@@ -14,20 +29,22 @@
       <label for="bookingId">Booking</label>
       <select id="bookingId" [(ngModel)]="model.bookingId" name="bookingId" required (ngModelChange)="selectBooking($event)">
         <option *ngFor="let b of bookings" [ngValue]="b.id">
-          #{{ b.id }} | Dealer: {{ b.dealerId }} | Vehicle: {{ b.vehicleId }} | Status: {{ b.bookingStatus }}
+          #{{ b.id }} | Dealer: {{ b.dealerId }} | Vehicle: {{ b.vehicleId }} | Amount: {{ formatCurrency(b.amount) }}
         </option>
       </select>
 
       <label for="amount">Amount</label>
-      <input id="amount" type="number" [(ngModel)]="model.amount" name="amount" min="0" required />
+      <input id="amount" type="number" [ngModel]="lockedAmount" name="amount" min="0" required readonly />
+      <small>Amount is locked from the selected booking.</small>
 
       <label for="paymentMethod">Method</label>
       <select id="paymentMethod" [(ngModel)]="model.paymentMethod" name="paymentMethod" required>
         <option value="UPI">UPI</option>
         <option value="CARD">CARD</option>
       </select>
+      <small>For a dummy Razorpay success, choose UPI and use success&#64;razorpay.</small>
 
-      <button class="btn" type="submit" [disabled]="f.invalid || processing || !bookings.length">
+      <button class="btn" type="submit" [disabled]="f.invalid || processing || !bookings.length || !lockedAmount">
         {{ processing ? 'Processing...' : 'Pay with Razorpay' }}
       </button>
     </form>
@@ -39,3 +56,12 @@
     </div>
   </article>
 </section>
+
+<app-demo-payment-modal
+  [open]="demoCheckoutOpen"
+  [amount]="lockedAmount"
+  [bookingLabel]="selectedBooking ? ('Booking #' + selectedBooking.id) : 'Selected booking'"
+  [note]="demoCheckoutMessage"
+  (closed)="closeDemoCheckout()"
+  (confirmed)="confirmDemoCheckout()"
+></app-demo-payment-modal>

@@ -4,6 +4,7 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { VehiclesApi } from '../../api/vehicles.service';
+import { ToastService } from '../../core/services/toast.service';
 import { Vehicle } from '../../shared/models/vehicle.model';
 import { AppFooterComponent } from '../../shared/ui/app-footer.component';
 import { SectionHeaderComponent } from '../../shared/ui/section-header.component';
@@ -65,7 +66,7 @@ interface FaqItem {
             </form>
 
             <div class="hero-actions">
-              <a routerLink="/login"><button type="button" class="btn">Browse Vehicles</button></a>
+              <a routerLink="/vehicles"><button type="button" class="btn">Browse Vehicles</button></a>
               <a routerLink="/register" [queryParams]="{ role: 'DEALER' }"><button type="button" class="btn btn-accent">Partner as Dealer</button></a>
             </div>
           </div>
@@ -112,8 +113,9 @@ interface FaqItem {
                   [vehicle]="vehicle"
                   [dealerName]="'Trusted Dealer'"
                   [statusLabel]="normalizeStatus(vehicle.status)"
-                  (book)="goLogin()"
-                  (favorite)="goLogin()"
+                  (book)="goLogin($event)"
+                  (favorite)="goLogin($event)"
+                  (review)="goLogin($event)"
                 ></app-vehicle-card>
               </div>
             </ng-template>
@@ -187,10 +189,10 @@ export class HomeLandingComponent {
   ];
 
   benefits: BenefitItem[] = [
-    { icon: '🛡️', title: 'Verified Listings', description: 'Every listing is reviewed for profile quality, pricing signals, and clear ownership metadata.' },
-    { icon: '⚙️', title: 'Transparent Process', description: 'Track every booking stage with clear statuses from request to confirmation and delivery readiness.' },
-    { icon: '💬', title: 'Reliable Support', description: 'Integrated support flow through reviews and account channels keeps communication straightforward.' },
-    { icon: '📈', title: 'Dealer Growth Tools', description: 'Dealer dashboard provides inventory visibility, booking actionability, and performance snapshots.' },
+    { icon: '01', title: 'Verified Listings', description: 'Every listing is reviewed for profile quality, pricing signals, and clear ownership metadata.' },
+    { icon: '02', title: 'Transparent Process', description: 'Track every booking stage with clear statuses from request to confirmation and delivery readiness.' },
+    { icon: '03', title: 'Reliable Support', description: 'Integrated support flow through reviews and account channels keeps communication straightforward.' },
+    { icon: '04', title: 'Dealer Growth Tools', description: 'Dealer dashboard provides inventory visibility, booking actionability, and performance snapshots.' },
   ];
 
   faqs: FaqItem[] = [
@@ -201,7 +203,11 @@ export class HomeLandingComponent {
     { q: 'Can I edit or delete my review?', a: 'Yes. Customer reviews support edit and delete actions from the Reviews page.' },
   ];
 
-  constructor(private vehiclesApi: VehiclesApi, private router: Router) {
+  constructor(
+    private vehiclesApi: VehiclesApi,
+    private router: Router,
+    private toast: ToastService
+  ) {
     this.loadVehicles();
   }
 
@@ -239,12 +245,18 @@ export class HomeLandingComponent {
   }
 
   applyHeroSearch() {
-    if (!this.heroSearch.trim()) return;
-    this.activeTab = 'best';
+    const query = this.heroSearch.trim();
+    this.router.navigate(['/vehicles'], {
+      queryParams: query ? { q: query } : undefined
+    });
   }
 
-  goLogin() {
-    this.router.navigateByUrl('/login');
+  goLogin(vehicle?: Vehicle) {
+    const returnUrl = vehicle?.id ? `/customer/vehicles/${vehicle.id}` : '/vehicles';
+    this.toast.info('Please login to continue.');
+    this.router.navigate(['/login'], {
+      queryParams: { returnUrl }
+    });
   }
 
   toggleFaq(index: number) {

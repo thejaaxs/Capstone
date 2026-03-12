@@ -33,9 +33,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 
           <label>Rating</label>
           <div class="rating-field">
-            <input class="rating-input" type="number" [(ngModel)]="model.rating" name="rating" required min="1" max="10" step="1" />
-            <small>1-10</small>
+            <input class="rating-input" type="number" [(ngModel)]="model.rating" name="rating" #ratingCtrl="ngModel" required min="1" max="5" step="1" />
+            <small>1-5</small>
           </div>
+          <small class="field-error" *ngIf="ratingCtrl.invalid && (ratingCtrl.touched || f.submitted)">
+            Rating must be between 1 and 5.
+          </small>
 
           <label>Title</label>
           <input [(ngModel)]="model.title" name="title" maxlength="200" />
@@ -43,14 +46,14 @@ import { HttpErrorResponse } from '@angular/common/http';
           <label>Comment</label>
           <textarea [(ngModel)]="model.comment" name="comment" maxlength="2000"></textarea>
 
-          <button class="btn" type="submit" [disabled]="f.invalid || saving">{{ saving ? 'Saving...' : 'Save' }}</button>
+          <button class="btn" type="submit" [disabled]="f.invalid || saving || !isValidRatingValue(model.rating)">{{ saving ? 'Saving...' : 'Save' }}</button>
         </form>
       </article>
     </section>
   `
 })
 export class ReviewCreateComponent {
-  model: ReviewCreateRequest = { customerId: 0, productName: '', rating: 8, title: '', comment: '' };
+  model: ReviewCreateRequest = { customerId: 0, productName: '', rating: 4, title: '', comment: '' };
   customers: Customer[] = [];
   saving = false;
 
@@ -86,25 +89,52 @@ export class ReviewCreateComponent {
   }
 
   submit() {
-    if (this.model.rating < 1 || this.model.rating > 10) {
-      this.toast.error('Rating must be between 1 and 10.');
+    const rating = this.normalizeRating(this.model.rating);
+    if (rating === null) {
+      this.toast.error('Rating must be between 1 and 5.');
       return;
     }
+    const payload: ReviewCreateRequest = {
+      ...this.model,
+      rating,
+      productName: this.model.productName.trim(),
+      title: this.model.title?.trim() || '',
+      comment: this.model.comment?.trim() || '',
+    };
 
     this.saving = true;
-    this.api.add(this.model).subscribe({
+    this.api.add(payload).subscribe({
       next: () => {
         this.toast.success('Review created');
         this.router.navigateByUrl('/customer/reviews');
       },
       error: (err: HttpErrorResponse) => {
         const backendMessage = typeof err.error === 'string' ? err.error : err.error?.message;
-        this.toast.error(backendMessage || 'Review creation failed');
+        this.toast.error(this.getFriendlyReviewError(backendMessage));
       },
       complete: () => {
         this.saving = false;
       }
     });
+  }
+
+  isValidRatingValue(value: unknown): boolean {
+    return this.normalizeRating(value) !== null;
+  }
+
+  private normalizeRating(value: unknown): number | null {
+    const rating = Number(value);
+    if (!Number.isFinite(rating)) return null;
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return null;
+    return rating;
+  }
+
+  private getFriendlyReviewError(message?: string): string {
+    const normalized = (message || '').toLowerCase();
+    if (normalized.includes('rating')) {
+      return 'Rating must be between 1 and 5.';
+    }
+    return message || 'Review creation failed';
   }
 }
 
